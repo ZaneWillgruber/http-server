@@ -48,7 +48,6 @@ func recieveJSON(w http.ResponseWriter, r *http.Request, payload any) error {
 	err := decoder.Decode(&payload)
 	if err != nil {
 		fmt.Printf("Error decoding parameters: %s\n", err)
-		respondWithError(w, 500, "something went wrong")
 		return err
 	}
 

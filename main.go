@@ -36,7 +36,10 @@ func main() {
 	apiCfg := apiConfig{dbQueries: database.New(db), platform: platform}
 	handler := http.StripPrefix("/app/", fs)
 
+	//middleware
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(handler))
+
+	//pages
 	mux.HandleFunc("GET /api/healthz", readinessEndpoint)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.metricsEndpoint)
 	mux.HandleFunc("POST /admin/reset", apiCfg.resetMetricsEndpoint)
@@ -48,8 +51,12 @@ func main() {
 
 	//users
 	mux.HandleFunc("POST /api/users", apiCfg.addUser)
+	mux.HandleFunc("POST /api/login", apiCfg.login)
 
-	server := http.Server{Handler: mux, Addr: ":8080"}
+	server := http.Server{
+		Handler: apiCfg.requestLogger(mux),
+		Addr:    ":8080",
+	}
 
 	fmt.Println("Listening locally at: http://localhost:8080")
 	if err := server.ListenAndServe(); err != nil {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github/zanewillgruber/http-server/internal/auth"
 	"github/zanewillgruber/http-server/internal/database"
 	"net/http"
 
@@ -46,7 +47,8 @@ func (cfg *apiConfig) resetMetricsEndpoint(w http.ResponseWriter, r *http.Reques
 
 func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email string
+		Email    string
+		Password string
 	}
 
 	params := parameters{}
@@ -61,7 +63,18 @@ func (cfg *apiConfig) addUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUser, err := cfg.dbQueries.CreateUser(r.Context(), params.Email)
+	if params.Password == "" {
+		respondWithError(w, 400, "missing password field")
+		return
+	}
+
+	hashed, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, 500, "could not hash password")
+		return
+	}
+
+	dbUser, err := cfg.dbQueries.CreateUser(r.Context(), database.CreateUserParams{params.Email, hashed})
 	if err != nil {
 		respondWithError(w, 500, "Could not create user: "+err.Error())
 		return
@@ -177,4 +190,40 @@ func (cfg *apiConfig) getChirpsByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, 200, chirp)
+}
+
+func (cfg *apiConfig) login(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string
+		Password string
+	}
+
+	params := parameters{}
+
+	err := recieveJSON(w, r, &params)
+	if err != nil {
+		respondWithError(w, 500, "Could not parse json: "+err.Error())
+		return
+	}
+
+	dbUser, err := cfg.dbQueries.GetUser(r.Context(), params.Email)
+	if err != nil {
+		w.WriteHeader(401)
+		return
+	}
+
+	err = auth.CheckPasswordHash(params.Password, dbUser.HashedPassword)
+	if err != nil {
+		w.WriteHeader(401)
+		return
+	}
+
+	user := User{
+		ID:        dbUser.ID,
+		CreatedAt: dbUser.CreatedAt,
+		UpdatedAt: dbUser.UpdatedAt,
+		Email:     dbUser.Email,
+	}
+
+	respondWithJSON(w, 200, user)
 }
